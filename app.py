@@ -26,6 +26,12 @@ KUDOS_CHANNEL_ID = os.environ.get("KUDOS_CHANNEL_ID")
 def fetch_thread_messages(client, channel_id: str, thread_ts: str) -> List[str]:
     """Fetch all messages from a thread."""
     try:
+        # First try to join the channel (in case bot was just added)
+        try:
+            client.conversations_join(channel=channel_id)
+        except Exception:
+            pass  # Already in channel or can't join (private)
+        
         result = client.conversations_replies(
             channel=channel_id,
             ts=thread_ts,
@@ -35,9 +41,10 @@ def fetch_thread_messages(client, channel_id: str, thread_ts: str) -> List[str]:
         for msg in result.get("messages", []):
             if msg.get("text") and not msg.get("bot_id"):
                 messages_list.append(msg["text"])
+        print(f"Fetched {len(messages_list)} messages from thread")
         return messages_list
     except Exception as e:
-        print(f"Error fetching thread: {e}")
+        print(f"Error fetching thread (channel={channel_id}, ts={thread_ts}): {e}")
         return []
 
 
