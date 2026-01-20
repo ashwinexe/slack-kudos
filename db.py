@@ -85,7 +85,10 @@ def get_kudos_count(receiver_id: str, month_only: bool = False) -> int:
         return cursor.fetchone()[0]
 
 
-def get_recent_kudos(receiver_id: str, limit: int = 3) -> list[dict]:
+from typing import List, Dict
+
+
+def get_recent_kudos(receiver_id: str, limit: int = 3) -> List[Dict]:
     """
     Get the most recent kudos for a user.
     Returns a list of dicts with sender_id, summary, and created_at.

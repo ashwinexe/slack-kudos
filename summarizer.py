@@ -4,15 +4,30 @@ OpenAI-powered thread summarization for kudos context.
 
 import os
 from openai import OpenAI
+from dotenv import load_dotenv
 
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+# Load env vars early
+load_dotenv()
+
+_client = None
+
+
+def get_client():
+    """Lazily initialize OpenAI client."""
+    global _client
+    if _client is None:
+        _client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+    return _client
 
 SYSTEM_PROMPT = """You summarize Slack thread conversations into a single, brief sentence describing what was accomplished or discussed. 
 Keep it under 20 words. Focus on the task or achievement. Be direct and factual.
 Do not include names or @mentions in your summary."""
 
 
-def summarize_thread(messages: list[str]) -> str:
+from typing import List
+
+
+def summarize_thread(messages: List[str]) -> str:
     """
     Summarize a list of thread messages into a brief description.
     
@@ -33,7 +48,7 @@ def summarize_thread(messages: list[str]) -> str:
         thread_text = thread_text[:2000] + "..."
     
     try:
-        response = client.chat.completions.create(
+        response = get_client().chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
