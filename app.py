@@ -138,6 +138,24 @@ def handle_give_kudos_shortcut(ack, shortcut, client):
                     },
                     "label": {"type": "plain_text", "text": "Who deserves kudos?"},
                 },
+                {
+                    "type": "input",
+                    "block_id": "custom_message_block",
+                    "optional": True,
+                    "element": {
+                        "type": "plain_text_input",
+                        "action_id": "custom_message",
+                        "placeholder": {
+                            "type": "plain_text",
+                            "text": "e.g., helping debug the login issue",
+                        },
+                    },
+                    "label": {"type": "plain_text", "text": "Custom message (optional)"},
+                    "hint": {
+                        "type": "plain_text",
+                        "text": "Leave empty to auto-summarize the thread. Use this for work done outside Slack or to write your own message.",
+                    },
+                },
             ],
         },
     )
@@ -152,6 +170,10 @@ def handle_kudos_modal_submission(ack, body, client, view):
     sender_id = body["user"]["id"]
     receiver_id = view["state"]["values"]["recipient_block"]["recipient"]["selected_user"]
 
+    # Get custom message if provided
+    custom_message_data = view["state"]["values"]["custom_message_block"]["custom_message"]
+    custom_message = custom_message_data.get("value", "").strip() if custom_message_data else ""
+
     # Parse metadata
     metadata = view.get("private_metadata", "")
     parts = metadata.split("|")
@@ -164,8 +186,13 @@ def handle_kudos_modal_submission(ack, body, client, view):
         print("Self-kudos blocked", flush=True)
         return
 
-    # Get thread context and summarize
-    if thread_ts and channel_id:
+    # Use custom message if provided, otherwise auto-summarize
+    if custom_message:
+        print(f"Using custom message: {custom_message}", flush=True)
+        summary = custom_message
+        # Still get thread link for context
+        thread_link = get_thread_link(client, channel_id, thread_ts) if thread_ts and channel_id else ""
+    elif thread_ts and channel_id:
         print("Fetching thread messages...", flush=True)
         thread_messages = fetch_thread_messages(client, channel_id, thread_ts)
         print(f"Got {len(thread_messages)} messages: {thread_messages[:2]}...", flush=True)
