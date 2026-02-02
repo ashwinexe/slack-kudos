@@ -219,7 +219,8 @@ def handle_kudos_modal_submission(ack, body, client, view):
 
     # Get custom message if provided
     custom_message_data = view["state"]["values"]["custom_message_block"]["custom_message"]
-    custom_message = custom_message_data.get("value", "").strip() if custom_message_data else ""
+    custom_message_value = custom_message_data.get("value") if custom_message_data else None
+    custom_message = custom_message_value.strip() if custom_message_value else ""
 
     # Parse metadata
     metadata = view.get("private_metadata", "")
