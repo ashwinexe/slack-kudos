@@ -25,6 +25,31 @@ KUDOS_CHANNEL_ID = os.environ.get("KUDOS_CHANNEL_ID")
 
 CELEBRATION_EMOJIS = ["🎉", "🙌", "⭐", "🚀", "💪", "🔥", "✨", "👏", "💯", "🏆"]
 
+# Funny fail-safe messages (randomly picked)
+SELF_KUDOS_MESSAGES = [
+    "Nice try, but you can't kudos yourself! Don't be a narc lol 😏",
+    "Self-love is important, but this ain't the way chief 💅",
+    "Plot twist: You can't be your own hype man here 📢",
+    "Error 403: Self-appreciation forbidden. Try a mirror instead 🪞",
+    "Whoa there, Kanye. Maybe let someone else give you props 🎤",
+    "Main character energy is great, but kudos need a supporting cast 🎬",
+    "Task failed successfully: Self-kudos blocked ❌",
+    "The audacity! The confidence! ...but still no. 😂",
+    "Sir/Ma'am, this is a peer recognition system 🫠",
+    "I admire the self-confidence, but that's not how this works 😅",
+]
+
+BOT_KUDOS_MESSAGES = [
+    "I guide others to a treasure I cannot possess. 🔴💀",
+    "Beep boop... I appreciate the thought, but I'm just code 🤖💔",
+    "I'm flattered, but my love language is uptime, not kudos ⚡",
+    "Thanks, but I literally can't feel joy. I'm a bot. 🫥",
+    "Error: Cannot process emotions. Redirecting kudos to /dev/null 🕳️",
+    "That's sweet, but I run on API calls, not compliments 🔌",
+    "*blushes in binary* ...but seriously, kudos a human instead 01100001",
+    "I'm just here to serve. Like a vending machine, but for recognition 🎰",
+]
+
 
 def fetch_thread_messages(client, channel_id: str, thread_ts: str) -> List[str]:
     """Fetch all messages from a thread."""
@@ -161,6 +186,28 @@ def handle_give_kudos_shortcut(ack, shortcut, client):
     )
 
 
+def get_bot_user_id(client) -> str:
+    """Get the bot's own user ID."""
+    try:
+        result = client.auth_test()
+        return result.get("user_id", "")
+    except Exception as e:
+        print(f"Error getting bot user ID: {e}")
+        return ""
+
+
+def send_ephemeral_message(client, channel_id: str, user_id: str, message: str):
+    """Send an ephemeral message only visible to the user."""
+    try:
+        client.chat_postEphemeral(
+            channel=channel_id,
+            user=user_id,
+            text=message,
+        )
+    except Exception as e:
+        print(f"Error sending ephemeral message: {e}")
+
+
 @app.view("kudos_modal")
 def handle_kudos_modal_submission(ack, body, client, view):
     """Handle the kudos modal submission."""
@@ -181,9 +228,19 @@ def handle_kudos_modal_submission(ack, body, client, view):
     thread_ts = parts[1] if len(parts) > 1 else None
     print(f"Channel: {channel_id}, Thread: {thread_ts}", flush=True)
 
-    # Prevent self-kudos
+    # Funny fail-safe: Prevent self-kudos
     if receiver_id == sender_id:
         print("Self-kudos blocked", flush=True)
+        if channel_id:
+            send_ephemeral_message(client, channel_id, sender_id, random.choice(SELF_KUDOS_MESSAGES))
+        return
+
+    # Funny fail-safe: Prevent kudos to the bot itself
+    bot_user_id = get_bot_user_id(client)
+    if receiver_id == bot_user_id:
+        print("Bot-kudos blocked", flush=True)
+        if channel_id:
+            send_ephemeral_message(client, channel_id, sender_id, random.choice(BOT_KUDOS_MESSAGES))
         return
 
     # Use custom message if provided, otherwise auto-summarize
