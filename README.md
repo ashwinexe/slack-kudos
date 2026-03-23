@@ -1,4 +1,5 @@
-# Devfolio Kudos Bot
+# Slack Kudos Bot
+Made for Devfolio
 
 A lightweight Slack bot for giving and tracking kudos. Makes appreciation visible, personal, and meaningful.
 
