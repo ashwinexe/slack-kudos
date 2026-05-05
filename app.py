@@ -1,25 +1,28 @@
 """
-Devfolio Kudos Bot - Main application.
-A lightweight Slack bot for giving kudos.
+Slack Kudos Bot application entrypoint.
 """
 
 import os
 import random
-from typing import Optional, List
+from typing import List
+
 from dotenv import load_dotenv
-from slack_bolt import App
+from flask import Flask, jsonify, request
+from slack_bolt import App as BoltApp
+from slack_bolt.adapter.flask import SlackRequestHandler
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 
 from summarizer import summarize_thread
 
-# Load environment variables
 load_dotenv()
 
-# Initialize the app
-app = App(
+bolt_app = BoltApp(
     token=os.environ.get("SLACK_BOT_TOKEN"),
     signing_secret=os.environ.get("SLACK_SIGNING_SECRET"),
 )
+slack_handler = SlackRequestHandler(bolt_app)
+
+app = Flask(__name__)
 
 KUDOS_CHANNEL_ID = os.environ.get("KUDOS_CHANNEL_ID")
 
@@ -76,15 +79,6 @@ def fetch_thread_messages(client, channel_id: str, thread_ts: str) -> List[str]:
         return []
 
 
-def get_channel_name(client, channel_id: str) -> str:
-    """Get channel name from channel ID."""
-    try:
-        result = client.conversations_info(channel=channel_id)
-        return f"#{result['channel']['name']}"
-    except Exception:
-        return "a channel"
-
-
 def get_thread_link(client, channel_id: str, thread_ts: str) -> str:
     """Generate a permalink to the thread."""
     try:
@@ -125,7 +119,7 @@ def post_kudos_to_channel(client, sender_id: str, receiver_id: str, summary: str
 # MESSAGE SHORTCUT: Three-dot menu -> "Give Kudos"
 # ============================================================
 
-@app.shortcut("give_kudos")
+@bolt_app.shortcut("give_kudos")
 def handle_give_kudos_shortcut(ack, shortcut, client):
     """
     Handle the 'Give Kudos' message shortcut.
@@ -208,11 +202,10 @@ def send_ephemeral_message(client, channel_id: str, user_id: str, message: str):
         print(f"Error sending ephemeral message: {e}")
 
 
-@app.view("kudos_modal")
+@bolt_app.view("kudos_modal")
 def handle_kudos_modal_submission(ack, body, client, view):
     """Handle the kudos modal submission."""
     ack()
-    print("=== KUDOS MODAL SUBMITTED ===", flush=True)
 
     sender_id = body["user"]["id"]
     receiver_id = view["state"]["values"]["recipient_block"]["recipient"]["selected_user"]
@@ -227,11 +220,9 @@ def handle_kudos_modal_submission(ack, body, client, view):
     parts = metadata.split("|")
     channel_id = parts[0] if len(parts) > 0 else None
     thread_ts = parts[1] if len(parts) > 1 else None
-    print(f"Channel: {channel_id}, Thread: {thread_ts}", flush=True)
 
     # Funny fail-safe: Prevent self-kudos
     if receiver_id == sender_id:
-        print("Self-kudos blocked", flush=True)
         if channel_id:
             send_ephemeral_message(client, channel_id, sender_id, random.choice(SELF_KUDOS_MESSAGES))
         return
@@ -239,45 +230,51 @@ def handle_kudos_modal_submission(ack, body, client, view):
     # Funny fail-safe: Prevent kudos to the bot itself
     bot_user_id = get_bot_user_id(client)
     if receiver_id == bot_user_id:
-        print("Bot-kudos blocked", flush=True)
         if channel_id:
             send_ephemeral_message(client, channel_id, sender_id, random.choice(BOT_KUDOS_MESSAGES))
         return
 
     # Use custom message if provided, otherwise auto-summarize
     if custom_message:
-        print(f"Using custom message: {custom_message}", flush=True)
         summary = custom_message
         # Still get thread link for context
         thread_link = get_thread_link(client, channel_id, thread_ts) if thread_ts and channel_id else ""
     elif thread_ts and channel_id:
-        print("Fetching thread messages...", flush=True)
         thread_messages = fetch_thread_messages(client, channel_id, thread_ts)
-        print(f"Got {len(thread_messages)} messages: {thread_messages[:2]}...", flush=True)
         summary = summarize_thread(thread_messages)
-        print(f"Summary: {summary}", flush=True)
         thread_link = get_thread_link(client, channel_id, thread_ts)
     else:
         summary = "their contributions"
         thread_link = ""
 
     # Post to #kudos channel
-    print(f"Posting kudos: {summary}", flush=True)
     post_kudos_to_channel(client, sender_id, receiver_id, summary, thread_link)
 
 
+@app.get("/")
+def healthcheck():
+    """Simple health endpoint for local and hosted checks."""
+    return jsonify({"ok": True, "service": "slack-kudos"})
+
+
+@app.route("/slack/events", methods=["GET", "POST"])
+def slack_events():
+    """Handle Slack interactions over HTTP."""
+    return slack_handler.handle(request)
+
+
 def main():
-    """Start the bot."""
+    """Start the bot locally."""
     app_token = os.environ.get("SLACK_APP_TOKEN")
 
     if app_token:
         print("Starting bot in Socket Mode...")
-        handler = SocketModeHandler(app, app_token)
+        handler = SocketModeHandler(bolt_app, app_token)
         handler.start()
     else:
         port = int(os.environ.get("PORT", 3000))
         print(f"Starting bot in HTTP mode on port {port}...")
-        app.start(port=port)
+        app.run(host="0.0.0.0", port=port)
 
 
 if __name__ == "__main__":
