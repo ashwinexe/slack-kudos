@@ -3,11 +3,12 @@ OpenAI-powered thread summarization for kudos context.
 """
 
 import os
+import re
 from typing import List
+
 from dotenv import load_dotenv
 from openai import OpenAI
 
-# Load env vars early
 load_dotenv()
 
 _client = None
@@ -45,20 +46,11 @@ def summarize_thread(messages: List[str]) -> str:
     Returns:
         A brief summary string (~10 words max)
     """
-    if not messages:
-        return "their contributions"
-
-    # Join messages with newlines for context
-    thread_text = "\n".join(messages)
-
-    # Truncate if too long
-    if len(thread_text) > 2000:
-        thread_text = thread_text[:2000] + "..."
+    thread_text = build_model_input(messages)
+    if not thread_text:
+        return safe_fallback_summary()
 
     try:
-        print(f"Calling OpenAI with {len(messages)} messages...")
-        print(f"Thread text: {thread_text[:200]}...")
-
         response = get_client().chat.completions.create(
             model="gpt-4o-mini",
             messages=[
@@ -69,18 +61,53 @@ def summarize_thread(messages: List[str]) -> str:
             temperature=0.3,
         )
         summary = response.choices[0].message.content.strip()
-        print(f"OpenAI returned: {summary}")
 
         # Remove quotes if the model wrapped the response
         if summary.startswith('"') and summary.endswith('"'):
             summary = summary[1:-1]
 
-        return summary
+        return summary or safe_fallback_summary()
 
     except Exception as e:
         print(f"OpenAI summarization failed: {e}")
-        # Fallback: use first message snippet as context
-        if messages:
-            first_msg = messages[0][:50].strip()
-            return f"helping with: {first_msg}..."
-        return "their awesome contribution"
+        return safe_fallback_summary()
+
+
+def build_model_input(messages: List[str]) -> str:
+    """Prepare a minimally redacted thread transcript for summarization."""
+    sanitized_messages = [sanitize_message(message) for message in messages]
+    sanitized_messages = [message for message in sanitized_messages if message]
+    if not sanitized_messages:
+        return ""
+
+    thread_text = "\n".join(sanitized_messages)
+    if len(thread_text) > 2000:
+        thread_text = thread_text[:2000] + "..."
+    return thread_text
+
+
+def sanitize_message(message: str) -> str:
+    """Strip Slack-specific identifiers and obvious direct identifiers."""
+    text = message.strip()
+    if not text:
+        return ""
+
+    substitutions = [
+        (r"<@[^>]+>", "@someone"),
+        (r"<#[^>]+>", "#channel"),
+        (r"<(?:mailto:)?([^>|]+)\|([^>]+)>", r"\2"),
+        (r"<https?://[^>|]+(?:\|([^>]+))?>", r"\1"),
+        (r"\b[A-Z0-9]{9,}\b", "[id]"),
+        (r"\b[\w\.-]+@[\w\.-]+\.\w+\b", "[email]"),
+    ]
+    for pattern, replacement in substitutions:
+        text = re.sub(pattern, replacement, text)
+
+    text = re.sub(r"https?://\S+", "[link]", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+
+def safe_fallback_summary() -> str:
+    """Return a non-sensitive fallback when summarization is unavailable."""
+    return "helping with the thread"

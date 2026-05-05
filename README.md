@@ -1,139 +1,109 @@
 # Slack Kudos Bot
 Made for Devfolio
 
-A lightweight Slack bot for giving and tracking kudos. Makes appreciation visible, personal, and meaningful.
+A lightweight Slack bot for turning a message shortcut into a public kudos post.
 
-## Features
+## What It Does
 
-- **`/kudos @user`** - Give kudos in any thread. The bot summarizes the thread context and:
-  - Posts a compact message to the `#kudos` channel
-  - Sends a private DM to the receiver with their stats
+- Adds a **message shortcut** called `Give Kudos`
+- Opens a modal so the sender can choose the recipient
+- Either summarizes the thread with OpenAI or uses a custom message
+- Posts a compact celebration message in a shared kudos channel
 
-- **`/kudos me`** - View your personal kudos history via DM:
-  - This month's count
-  - All-time count
-  - Recent kudos with context
+This repo does **not** currently persist kudos history or expose a slash command flow.
 
-## Setup
+## Privacy Notes
 
-### 1. Create a Slack App
+- Thread text is never written to application logs
+- Slack mentions, IDs, emails, and links are sanitized before being sent to OpenAI
+- If summarization fails, the bot falls back to a generic safe summary instead of echoing Slack text
 
-1. Go to [api.slack.com/apps](https://api.slack.com/apps) and click **Create New App**
-2. Choose **From scratch** and name it "Kudos" (or your preferred name)
-3. Select your workspace
+## Slack App Setup
 
-### 2. Configure Bot Permissions
+### 1. Create the Slack app
 
-Navigate to **OAuth & Permissions** and add these **Bot Token Scopes**:
+1. Go to [api.slack.com/apps](https://api.slack.com/apps)
+2. Create a new app from scratch
+3. Install it into your workspace
+
+### 2. Add bot scopes
+
+Add these bot token scopes under **OAuth & Permissions**:
 
 | Scope | Purpose |
 |-------|---------|
-| `commands` | Handle slash commands |
-| `chat:write` | Post messages |
-| `channels:history` | Read public channel threads |
-| `groups:history` | Read private channel threads |
-| `im:write` | Send DMs |
-| `users:read` | Resolve user names |
+| `chat:write` | Post the kudos message |
+| `channels:history` | Read public thread context |
+| `groups:history` | Read private channel thread context |
+| `users:read` | Resolve bot identity for self-protection checks |
 
-### 3. Create the Slash Command
+### 3. Enable Interactivity
 
-Navigate to **Slash Commands** and click **Create New Command**:
+Under **Interactivity & Shortcuts**:
 
-- **Command:** `/kudos`
-- **Request URL:** Your server URL + `/slack/events` (e.g., `https://your-app.railway.app/slack/events`)
-- **Short Description:** Give kudos to a teammate
-- **Usage Hint:** `@user` or `me`
+1. Turn interactivity on
+2. Set the request URL to `https://your-domain/slack/events`
 
-### 4. Enable Socket Mode (for development)
+### 4. Create the message shortcut
 
-1. Go to **Socket Mode** and enable it
-2. Generate an **App-Level Token** with `connections:write` scope
-3. Save this token as `SLACK_APP_TOKEN`
+Under **Interactivity & Shortcuts**, create a **Message Shortcut**:
 
-### 5. Install to Workspace
+- **Name:** `Give Kudos`
+- **Short description:** `Celebrate someone for this thread`
+- **Callback ID:** `give_kudos`
 
-1. Go to **Install App** and click **Install to Workspace**
-2. Copy the **Bot User OAuth Token** (starts with `xoxb-`)
+### 5. Optional local Socket Mode
 
-### 6. Create a #kudos Channel
-
-Create a channel called `#kudos` (or any name) where public kudos messages will be posted. Copy the channel ID from the URL or channel details.
+For local development, you can enable **Socket Mode** and create an app-level token with the `connections:write` scope. Set that token as `SLACK_APP_TOKEN`.
 
 ## Environment Variables
 
-Create a `.env` file (for local development):
+Copy `.env.example` to `.env` for local development.
 
-```
-SLACK_BOT_TOKEN=xoxb-your-bot-token
-SLACK_SIGNING_SECRET=your-signing-secret
-SLACK_APP_TOKEN=xapp-your-app-token
-OPENAI_API_KEY=sk-your-openai-key
-KUDOS_CHANNEL_ID=C0123456789
-```
-
-| Variable | Where to find it |
-|----------|------------------|
-| `SLACK_BOT_TOKEN` | OAuth & Permissions → Bot User OAuth Token |
-| `SLACK_SIGNING_SECRET` | Basic Information → App Credentials |
-| `SLACK_APP_TOKEN` | Basic Information → App-Level Tokens |
-| `OPENAI_API_KEY` | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
-| `KUDOS_CHANNEL_ID` | Right-click channel → View channel details → Copy ID |
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `SLACK_BOT_TOKEN` | Yes | Slack bot token |
+| `SLACK_SIGNING_SECRET` | Yes | Verifies Slack requests in HTTP mode |
+| `KUDOS_CHANNEL_ID` | Yes | Channel that receives kudos posts |
+| `OPENAI_API_KEY` | Optional | Enables AI-generated thread summaries |
+| `SLACK_APP_TOKEN` | Optional | Enables local Socket Mode |
 
 ## Running Locally
 
 ```bash
-# Install dependencies
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-
-# Run the bot (Socket Mode)
 python app.py
 ```
 
-## Deploy to Railway
+- If `SLACK_APP_TOKEN` is set, the bot runs in Socket Mode
+- Otherwise it runs a local Flask server on `http://localhost:3000`
 
-1. Push this repo to GitHub
-2. Go to [railway.app](https://railway.app) and create a new project
-3. Connect your GitHub repo
-4. Add the environment variables in Railway dashboard
-5. Railway will auto-deploy on push
+## Deploying
 
-**Important:** For production, remove `SLACK_APP_TOKEN` to use HTTP mode instead of Socket Mode. Update your Slack app's Request URL to point to your Railway URL.
+### Vercel
 
-### Procfile (optional)
+This repo exports a Flask app from `app.py`, which makes it compatible with Vercel's Python runtime.
 
-If Railway doesn't auto-detect the start command, add a `Procfile`:
+1. Import the repo into Vercel
+2. Set the environment variables above
+3. Deploy
+4. Point Slack interactivity to `https://your-project.vercel.app/slack/events`
 
-```
+### Railway or other always-on hosts
+
+The bot also works on Railway or similar Python hosts. In HTTP mode, the `Procfile` starts the Flask app with:
+
+```bash
 web: python app.py
 ```
 
-## Usage
-
-### Give kudos (in a thread)
-```
-/kudos @teammate
-```
-
-The bot will:
-1. Read and summarize the thread
-2. Post to #kudos: "@you gave kudos to @teammate for fixing the auth bug"
-3. DM the receiver with their updated stats
-
-### View your kudos
-```
-/kudos me
-```
-
-You'll receive a DM with your kudos history.
-
 ## Architecture
 
-```
-app.py          → Main bot logic, slash command handlers
-db.py           → SQLite database operations
-summarizer.py   → OpenAI thread summarization
-messages.py     → Message templates (DM/public)
-kudos.db        → SQLite database (auto-created)
+```text
+app.py         Flask + Slack Bolt app, shortcut handlers, local entrypoint
+summarizer.py  Sanitized OpenAI thread summarization
 ```
 
 ## License
