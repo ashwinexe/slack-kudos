@@ -1,27 +1,28 @@
 """
-OpenAI-powered thread summarization for kudos context.
+OpenRouter-powered thread summarization for kudos context.
 """
 
 import os
 import re
 from typing import List
 
-from dotenv import load_dotenv
 from openai import OpenAI
-
-load_dotenv()
 
 _client = None
 
 
 def get_client():
-    """Lazily initialize OpenAI client."""
+    """Lazily initialize OpenRouter client (OpenAI-compatible API)."""
     global _client
     if _client is None:
-        api_key = os.environ.get("OPENAI_API_KEY")
+        api_key = os.environ.get("OPENROUTER_API_KEY")
         if not api_key:
-            raise ValueError("OPENAI_API_KEY not found in environment variables")
-        _client = OpenAI(api_key=api_key)
+            raise ValueError("OPENROUTER_API_KEY not found in environment variables")
+        _client = OpenAI(
+            api_key=api_key,
+            base_url="https://openrouter.ai/api/v1",
+            timeout=10.0,
+        )
     return _client
 
 
@@ -52,7 +53,7 @@ def summarize_thread(messages: List[str]) -> str:
 
     try:
         response = get_client().chat.completions.create(
-            model="gpt-4o-mini",
+            model="openai/gpt-4o-mini",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": f"Summarize this thread:\n\n{thread_text}"},
